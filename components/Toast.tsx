@@ -33,7 +33,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             key={t.id}
             className={`toast-in w-full max-w-[380px] rounded-2xl px-4 py-3 text-center text-sm font-semibold shadow-2xl backdrop-blur ${
               t.kind === "success"
-                ? "bg-lime/90 text-ink"
+                ? "bg-white/95 text-black"
                 : t.kind === "error"
                   ? "bg-red-500/90 text-white"
                   : "bg-card/95 text-white"

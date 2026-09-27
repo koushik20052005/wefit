@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError, useToast } from "@/components/Toast";
-import { IconBolt } from "@/components/icons";
+import { IconBolt, IconEye, IconEyeOff } from "@/components/icons";
+import Logo from "@/components/Logo";
+import { Btn } from "@/components/ui";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,6 +14,7 @@ export default function LoginPage() {
   const [tab, setTab] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -26,11 +29,11 @@ export default function LoginPage() {
       if (tab === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
-        toast("Welcome back!", "success");
+        toast("Welcome back. Time to work.", "success");
       } else {
         const { error } = await supabase.auth.signUp({ email: email.trim(), password });
         if (error) throw error;
-        toast("Account created. Let's set up your profile.", "success");
+        toast("Account created. Let's set you up.", "success");
       }
       router.replace("/");
     } catch (err) {
@@ -41,26 +44,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="page-enter flex min-h-dvh flex-col px-6 pb-10 pt-14">
+    <div className="page-enter flex min-h-dvh flex-col px-6 pb-10 pt-16">
       <div className="mb-10 flex flex-col items-center text-center">
-        <div className="pulse-ring mb-5 flex h-20 w-20 items-center justify-center rounded-[1.75rem] bg-gradient-to-br from-lime to-cy shadow-[0_0_40px_rgba(163,230,53,0.35)]">
-          <span className="text-4xl font-black text-ink">W</span>
+        <div className="pop-in mb-6">
+          <Logo size={84} />
         </div>
-        <h1 className="text-3xl font-black tracking-tight">
-          WE<span className="bg-gradient-to-r from-lime to-cy bg-clip-text text-transparent">FIT</span>
+        <h1 className="text-4xl font-black tracking-tighter">
+          WE<span className="text-white/40">FIT</span>
         </h1>
-        <p className="mt-2 max-w-[260px] text-sm text-white/55">
-          Your gym and diet companion. Train hard, eat smart.
+        <p className="mt-2 max-w-[250px] text-sm text-white/50">
+          Train. Eat. Repeat. Your gym companion that keeps the streak alive.
         </p>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 rounded-2xl bg-card p-1.5">
+      <div className="mb-6 grid grid-cols-2 rounded-2xl border border-white/10 bg-card p-1.5">
         {(["login", "register"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`btn-press rounded-xl py-2.5 text-sm font-bold capitalize transition-all ${
-              tab === t ? "bg-gradient-to-r from-lime to-cy text-ink shadow" : "text-white/50"
+              tab === t ? "bg-white text-black shadow" : "text-white/45"
             }`}
           >
             {t === "login" ? "Log in" : "Register"}
@@ -70,7 +73,7 @@ export default function LoginPage() {
 
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div>
-          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/45">Email</label>
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/40">Email</label>
           <input
             type="email"
             className="field"
@@ -81,27 +84,39 @@ export default function LoginPage() {
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/45">Password</label>
-          <input
-            type="password"
-            className="field"
-            placeholder={tab === "register" ? "Min. 6 characters" : "Your password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete={tab === "login" ? "current-password" : "new-password"}
-          />
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/40">Password</label>
+          <div className="relative">
+            <input
+              type={showPw ? "text" : "password"}
+              className="field pr-12"
+              placeholder={tab === "register" ? "Min. 6 characters" : "Your password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete={tab === "login" ? "current-password" : "new-password"}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw((s) => !s)}
+              className="btn-press absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-white/45"
+              aria-label={showPw ? "Hide password" : "Show password"}
+            >
+              {showPw ? <IconEyeOff width={20} height={20} /> : <IconEye width={20} height={20} />}
+            </button>
+          </div>
         </div>
-        <button
-          type="submit"
-          disabled={busy}
-          className="btn-press mt-2 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-lime to-cy py-4 text-base font-extrabold text-ink shadow-[0_8px_30px_rgba(163,230,53,0.3)] disabled:opacity-50"
-        >
+        <Btn disabled={busy} className="mt-2 flex items-center justify-center gap-2 py-4 text-base">
           <IconBolt width={20} height={20} />
           {busy ? "Please wait…" : tab === "login" ? "Log in" : "Create account"}
-        </button>
+        </Btn>
       </form>
 
-      <p className="mt-8 text-center text-xs text-white/35">
+      <div className="mt-8 flex items-center justify-center gap-6 text-white/30">
+        <div className="flex items-center gap-1.5 text-xs font-bold"><IconBolt width={14} height={14} /> Smart plans</div>
+        <div className="flex items-center gap-1.5 text-xs font-bold"><IconEye width={14} height={14} /> Streaks</div>
+        <div className="flex items-center gap-1.5 text-xs font-bold"><IconBolt width={14} height={14} /> 1900+ foods</div>
+      </div>
+
+      <p className="mt-6 text-center text-xs text-white/35">
         {tab === "login" ? "New to WEFIT? Tap Register above." : "Already have an account? Tap Log in above."}
       </p>
     </div>

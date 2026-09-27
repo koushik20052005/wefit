@@ -1,6 +1,8 @@
 export type Goal = "lose" | "maintain" | "gain";
 export type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "athlete";
 export type MealType = "breakfast" | "lunch" | "snacks" | "dinner";
+export type PlanLevel = "beginner" | "intermediate" | "advanced";
+export type TrainingMode = "home" | "gym";
 
 export interface Profile {
   id: string;
@@ -11,6 +13,9 @@ export interface Profile {
   weight_kg: number | null;
   goal: Goal | null;
   activity_level: ActivityLevel | null;
+  level: PlanLevel | null;
+  training_mode: TrainingMode | null;
+  target_weight_kg: number | null;
   created_at: string;
 }
 
@@ -21,6 +26,8 @@ export interface Exercise {
   equipment: string | null;
   difficulty: "beginner" | "intermediate" | "advanced" | null;
   instructions: string | null;
+  gif_url: string | null;
+  form_tips: string | null;
 }
 
 export interface WorkoutSession {
@@ -55,6 +62,7 @@ export interface FoodItem {
   fat_per_100g: number;
   serving_desc: string | null;
   serving_grams: number | null;
+  image_url: string | null;
 }
 
 export interface FoodLog {
@@ -98,4 +106,52 @@ export interface DayTargets {
   carbs: number;
   fat: number;
   waterMl: number;
+}
+
+export interface DayTask {
+  id: string;
+  user_id: string;
+  task_date: string;
+  title: string;
+  detail: string | null;
+  kind: "workout" | "meal" | "water" | "sleep" | "habit";
+  done: boolean;
+  position: number;
+  created_at: string;
+}
+
+export interface CustomFood {
+  id: string;
+  user_id: string;
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  serving: string | null;
+  created_at: string;
+}
+
+export interface StreakFreeze {
+  id: string;
+  user_id: string;
+  earned_at: string;
+  used_for_date: string | null;
+}
+
+export interface Checkin {
+  id: string;
+  user_id: string;
+  checkin_date: string;
+  created_at: string;
+}
+
+export interface Reminder {
+  id: string;
+  user_id: string;
+  title: string;
+  time_of_day: string;
+  kind: "workout" | "meal" | "water" | "sleep" | "habit";
+  enabled: boolean;
+  created_at: string;
 }
