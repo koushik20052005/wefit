@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/Toast";
 import AuthGate from "@/components/AuthGate";
+import SwRegister from "@/components/SwRegister";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${jakarta.variable} h-full`}>
       <body className="min-h-dvh bg-ink font-sans text-white antialiased">
+        <SwRegister />
         <ToastProvider>
           <AuthGate>
             <div className="mx-auto min-h-dvh w-full max-w-[430px] bg-ink shadow-[0_0_60px_rgba(0,0,0,0.6)]">
