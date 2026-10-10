@@ -6,13 +6,24 @@ import { Card, SectionTitle, Skeleton, Btn, Sheet, ModalClose, EmptyState } from
 import { friendlyError, useToast } from "@/components/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useProfile } from "@/components/useProfile";
-import { calcStreak, todayISO } from "@/lib/fitness";
+import { calcStreak, todayISO, startOfWeekISO, setVolume } from "@/lib/fitness";
+import { getActivityDates, getFreezes, calcStreak as calcStreakFull } from "@/lib/streak";
 import { projectWeeks } from "@/lib/recommend";
 import type { Measurement } from "@/lib/supabase/types";
-import { IconCamera, IconChart, IconPlus, IconTrophy } from "@/components/icons";
+import { IconCamera, IconChart, IconPlus, IconShare, IconTrophy } from "@/components/icons";
 
 interface Badge { id: string; label: string; desc: string; earned: boolean }
 interface Photo { name: string; url: string; date: string }
+interface WeekDay { iso: string; dow: string; kcal: number; protein: number; workouts: number; volume: number; water: number }
+
+function WeekStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-white/[0.04] px-3 py-2.5 text-center">
+      <p className="text-lg font-black tabular-nums">{value}</p>
+      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-white/45">{label}</p>
+    </div>
+  );
+}
 
 export default function ProgressPage() {
   const { toast } = useToast();
@@ -23,6 +34,9 @@ export default function ProgressPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [beforeIdx, setBeforeIdx] = useState<number | null>(null);
   const [afterIdx, setAfterIdx] = useState<number | null>(null);
+  const [week, setWeek] = useState<WeekDay[]>([]);
+  const [weekRange, setWeekRange] = useState("");
+  const [weekStreak, setWeekStreak] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -43,6 +57,19 @@ export default function ProgressPage() {
     if (!cur || !tgt) return null;
     return projectWeeks(cur, tgt, profile?.goal ?? "maintain");
   }, [latest, profile]);
+
+  const weekTotals = useMemo(() => {
+    const t = { workouts: 0, volume: 0, kcal: 0, protein: 0, water: 0 };
+    for (const d of week) {
+      t.workouts += d.workouts; t.volume += d.volume;
+      t.kcal += d.kcal; t.protein += d.protein; t.water += d.water;
+    }
+    return t;
+  }, [week]);
+
+  const weekVolumeLabel = weekTotals.volume >= 1000
+    ? `${(weekTotals.volume / 1000).toFixed(1)}t`
+    : `${Math.round(weekTotals.volume)}kg`;
 
   async function load() {
     try {
@@ -88,6 +115,41 @@ export default function ProgressPage() {
         setBeforeIdx(0);
         setAfterIdx(null);
       }
+
+      // weekly report card data (Mon–Sun)
+      const ws = startOfWeekISO();
+      const days: WeekDay[] = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(ws + "T00:00:00");
+        d.setDate(d.getDate() + i);
+        return { iso: todayISO(d), dow: "SMTWTFS"[d.getDay()], kcal: 0, protein: 0, workouts: 0, volume: 0, water: 0 };
+      });
+      const [fRes, wRes, waRes] = await Promise.all([
+        supabase.from("food_logs").select("date,calories,protein").eq("user_id", uid).gte("date", ws),
+        supabase.from("workout_sessions").select("date,completed,workout_sets(reps,weight_kg)").eq("user_id", uid).gte("date", ws).eq("completed", true),
+        supabase.from("water_logs").select("date,ml").eq("user_id", uid).gte("date", ws),
+      ]);
+      if (fRes.error) throw fRes.error;
+      if (wRes.error) throw wRes.error;
+      if (waRes.error) throw waRes.error;
+      const byIso = new Map(days.map((d) => [d.iso, d]));
+      for (const r of (fRes.data ?? []) as { date: string; calories: number | null; protein: number | null }[]) {
+        const d = byIso.get((r.date ?? "").slice(0, 10)); if (!d) continue;
+        d.kcal += Number(r.calories) || 0; d.protein += Number(r.protein) || 0;
+      }
+      for (const s of (wRes.data ?? []) as { date: string; workout_sets: { reps: number | null; weight_kg: number | null }[] }[]) {
+        const d = byIso.get((s.date ?? "").slice(0, 10)); if (!d) continue;
+        d.workouts += 1;
+        d.volume += (s.workout_sets ?? []).reduce((a, x) => a + setVolume(x.reps, x.weight_kg), 0);
+      }
+      for (const r of (waRes.data ?? []) as { date: string; ml: number | null }[]) {
+        const d = byIso.get((r.date ?? "").slice(0, 10)); if (!d) continue;
+        d.water += Number(r.ml) || 0;
+      }
+      setWeek(days);
+      const fmtD = (iso: string) => new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      setWeekRange(`${fmtD(ws)} – ${fmtD(days[6].iso)}`);
+      const [aDates, frz] = await Promise.all([getActivityDates(uid), getFreezes(uid)]);
+      setWeekStreak(calcStreakFull(aDates, frz.map((f) => f.used_for_date ?? "")).streak);
     } catch (err) {
       toast(friendlyError(err), "error");
     } finally {
@@ -118,6 +180,84 @@ export default function ProgressPage() {
     }
   }
 
+  function shareReportCard() {
+    const stats: [string, string][] = [
+      ["WORKOUTS", String(weekTotals.workouts)],
+      ["VOLUME", weekVolumeLabel],
+      ["DAY STREAK", String(weekStreak)],
+      ["AVG KCAL / DAY", String(Math.round(weekTotals.kcal / 7))],
+      ["AVG PROTEIN", `${Math.round(weekTotals.protein / 7)}g`],
+      ["AVG WATER", `${(weekTotals.water / 7 / 1000).toFixed(1)}L`],
+    ];
+    const c = document.createElement("canvas");
+    c.width = 1080; c.height = 1350;
+    const x = c.getContext("2d")!;
+    x.fillStyle = "#09090b";
+    x.fillRect(0, 0, 1080, 1350);
+    x.strokeStyle = "rgba(255,255,255,0.15)";
+    x.lineWidth = 4;
+    x.strokeRect(40, 40, 1000, 1270);
+    x.fillStyle = "#fff";
+    x.fillRect(90, 110, 120, 120);
+    x.fillStyle = "#09090b";
+    x.font = "900 84px sans-serif";
+    x.fillText("W", 118, 200);
+    x.fillStyle = "#fff";
+    x.font = "900 72px sans-serif";
+    x.fillText("WEFIT", 240, 200);
+    x.fillStyle = "rgba(255,255,255,0.5)";
+    x.font = "700 40px sans-serif";
+    x.fillText("WEEKLY REPORT CARD", 90, 300);
+    x.fillStyle = "#fff";
+    x.font = "900 48px sans-serif";
+    x.fillText(weekRange || "This week", 90, 362);
+    // stat boxes: 3 cols x 2 rows
+    const xs = [90, 406, 722];
+    stats.forEach(([label, value], i) => {
+      const bx = xs[i % 3], by = 430 + Math.floor(i / 3) * 200;
+      x.fillStyle = "rgba(255,255,255,0.05)";
+      x.fillRect(bx, by, 300, 170);
+      x.fillStyle = "rgba(255,255,255,0.5)";
+      x.font = "700 30px sans-serif";
+      x.fillText(label, bx + 24, by + 56);
+      x.fillStyle = "#fff";
+      x.font = "900 58px sans-serif";
+      x.fillText(value, bx + 24, by + 128);
+    });
+    // 7-day calorie bars
+    x.fillStyle = "rgba(255,255,255,0.5)";
+    x.font = "700 36px sans-serif";
+    x.fillText("CALORIES BY DAY", 90, 906);
+    const maxKcal = Math.max(1, ...week.map((d) => d.kcal));
+    week.forEach((d, i) => {
+      const bx = 90 + i * 150;
+      const h = Math.max(8, (d.kcal / maxKcal) * 170);
+      x.fillStyle = d.kcal ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.18)";
+      x.fillRect(bx, 1120 - h, 100, h);
+      x.fillStyle = "rgba(255,255,255,0.55)";
+      x.font = "700 32px sans-serif";
+      x.fillText(d.dow, bx + 34, 1162);
+    });
+    x.fillStyle = "rgba(255,255,255,0.4)";
+    x.font = "700 36px sans-serif";
+    x.fillText("Train. Eat. Repeat.", 90, 1252);
+    c.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], "wefit-weekly-report.png", { type: "image/png" });
+      try {
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: "My WEFIT weekly report" });
+        } else {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "wefit-weekly-report.png";
+          a.click();
+          toast("Report card downloaded — share it anywhere.", "success");
+        }
+      } catch { /* user cancelled */ }
+    }, "image/png");
+  }
+
   return (
     <div className="min-h-dvh pb-28">
       <div className="page-enter px-5 pt-8">
@@ -132,6 +272,44 @@ export default function ProgressPage() {
           <div className="mt-4 flex flex-col gap-3"><Skeleton className="h-52" /><Skeleton className="h-24" /></div>
         ) : (
           <>
+            {/* weekly report card */}
+            <Card className="mt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-white/45">Weekly report card</p>
+                  <p className="mt-0.5 text-sm font-extrabold tabular-nums">{weekRange}</p>
+                </div>
+                <button onClick={shareReportCard} className="btn-press flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-xs font-black text-black">
+                  <IconShare width={14} height={14} /> Share
+                </button>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <WeekStat label="Workouts" value={String(weekTotals.workouts)} />
+                <WeekStat label="Volume" value={weekVolumeLabel} />
+                <WeekStat label="Day streak" value={String(weekStreak)} />
+                <WeekStat label="Avg kcal/day" value={String(Math.round(weekTotals.kcal / 7))} />
+                <WeekStat label="Avg protein" value={`${Math.round(weekTotals.protein / 7)}g`} />
+                <WeekStat label="Avg water" value={`${(weekTotals.water / 7 / 1000).toFixed(1)}L`} />
+              </div>
+              <div className="mt-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-white/40">Calories by day</p>
+                <div className="flex h-20 items-end gap-1.5">
+                  {week.map((d) => {
+                    const max = Math.max(1, ...week.map((x) => x.kcal));
+                    return (
+                      <div key={d.iso} className="flex flex-1 flex-col items-center justify-end gap-1">
+                        <div
+                          className="w-full rounded-sm bg-white/80"
+                          style={{ height: `${Math.max(6, (d.kcal / max) * 64)}px`, opacity: d.kcal ? 1 : 0.25 }}
+                        />
+                        <span className="text-[10px] font-bold text-white/45">{d.dow}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </Card>
+
             {/* weight trend */}
             <Card className="mt-4">
               <div className="flex items-center justify-between">
